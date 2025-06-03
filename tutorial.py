@@ -56,7 +56,7 @@ def get_block(size):
 class Player(pygame.sprite.Sprite):
   COLOR = (255,0,0)
   GRAVITY =1
-  SPRITES = load_sprite_sheets("MainCharacters","NinjaFrog",32,32,True)
+  SPRITES = load_sprite_sheets("MainCharacters","VirtualGuy",32,32,True)
   ANIMATION_DELAY =3
 
   def __init__(self,x,y,width,height):
@@ -71,6 +71,7 @@ class Player(pygame.sprite.Sprite):
      self.jump_count =0
      self.hit = False
      self.hit_count =0
+    
    
   def jump(self):
      self.y_vel = -self.GRAVITY *8
@@ -86,6 +87,9 @@ class Player(pygame.sprite.Sprite):
   def make_hit(self):
     self.hit = True   
     self.hit_count =0
+   
+  def landed(self):
+     self.landed = True
     
   def move_left(self,vel):
      self.x_vel = -vel
@@ -182,6 +186,7 @@ class Fire(Object):
       self.mask = pygame.mask.from_surface(self.image)
       self.animation_count =0
       self.animation_name ="off"
+      self.falling =False
    
 
    def on(self):
@@ -197,9 +202,65 @@ class Fire(Object):
      self.animation_count +=1
      self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
      self.mask = pygame.mask.from_surface(self.image)
+   
+     
 
      if self.animation_count //self.ANIMATION_DELAY > len(sprites):
         self.animation_count =0
+
+class Falling_Platform(Object):
+   ANIMATION_DELAY =3
+
+   def __init__(self,x,y,width,height):
+      super().__init__(x,y,width,height,"Falling Platform")
+      self.falling_platform = load_sprite_sheets("Traps","Falling Platforms",width,height)
+      self.image = self.falling_platform["On (32x10)"][0]
+      
+      self.mask = pygame.mask.from_surface(self.image)
+      self.animation_count =0
+      self.animation_name ="On (32x10)"
+      self.GRAVITY = 1
+      self.y_vel = 0
+      self.falling = False
+      self.fall_delay = 30
+      self.fall_timer = 0
+      self.reset_timer = 180
+      self.current_reset_timer = 0
+      self.original_y = y
+
+      
+ 
+
+   def loop(self):
+     sprites = self.falling_platform[self.animation_name]
+     sprite_index =(self.animation_count //self.ANIMATION_DELAY) % len(sprites)
+     self.image = sprites[sprite_index]
+     self.animation_count +=1
+     self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
+     self.mask = pygame.mask.from_surface(self.image)
+
+     if self.animation_count //self.ANIMATION_DELAY > len(sprites):
+        self.animation_count =0
+      
+     if self.falling:
+        if self.fall_timer > 0:
+            self.fall_timer -= 1
+        else:
+            self.y_vel += self.GRAVITY
+            self.rect.y += self.y_vel
+            self.current_reset_timer += 1
+
+            if self.current_reset_timer >= self.reset_timer:
+                self.falling = False
+                self.rect.y = self.original_y
+                self.y_vel = 0
+                self.current_reset_timer = 0
+ 
+
+
+  
+      
+      
 
 
 
@@ -237,6 +298,9 @@ def handle_vertical_collision(player,objects,dy):
          if dy > 0 :
             player.rect.bottom = obj.rect.top
             player.landed()
+         if isinstance(obj, Falling_Platform):
+                    obj.falling = True
+                    obj.y_vel = 0  # reset velocity before falling
          elif dy < 0:
             player.rect.top = obj.rect.bottom
             player.hit_head()
@@ -268,10 +332,10 @@ def handle_move(player,objects):
    collide_left = collide(player,objects,-PLAYER_VEL *2)
    collide_right = collide(player,objects,PLAYER_VEL *2)
 
-   if keys[pygame.K_LEFT] and not collide_left:
+   if ((keys[pygame.K_LEFT] or keys[pygame.K_a]) and not collide_left):
       player.move_left(PLAYER_VEL)
 
-   if keys[pygame.K_RIGHT] and not collide_right:
+   if ((keys[pygame.K_RIGHT] or keys[pygame.K_d]) and not collide_right):
       player.move_right(PLAYER_VEL)
    
    vertical_collide = handle_vertical_collision(player,objects,player.y_vel)
@@ -279,26 +343,52 @@ def handle_move(player,objects):
    for obj in to_check:
       if obj and obj.name =="fire":
          player.make_hit()
+      
+         
+      
+
+         
+
+
+def build_terrain(block_size):
+  
+
+   two_block = [Block(-200,HEIGHT-3*block_size,block_size),Block(200,HEIGHT-(2*block_size),block_size)]
+
+   second_level = [Block(0+i*block_size,HEIGHT- 4*block_size,block_size)
+            for i in range(4)]
+   
+   additional_blocks = [Block(1400+i*block_size,HEIGHT- 4*block_size,block_size)
+            for i in range(4)]
+   
+   stariway =[Block(1000+i*block_size,HEIGHT - i*block_size,block_size)
+              for i in range(4)]
+
+   floor =[Block(i*block_size,HEIGHT-block_size,block_size)
+            for i in range(-WIDTH//block_size,(WIDTH *2) // block_size)]
+   
+   objects =[*floor,Block(0,HEIGHT - block_size * 2,block_size),*two_block,*second_level,*additional_blocks,*stariway]
+   return objects
 
 
 
 
 def main(window):
    clock = pygame.time.Clock()
-   background, bg_image = get_background("Blue.png")
+   background, bg_image = get_background("Green.png")
 
    block_size = 96
 
    player = Player(100,100,50,50)
-
-   fire = Fire(100,HEIGHT -block_size-64,16,32)
+   fire = Fire(100,HEIGHT -4*block_size-64,16,32)
    fire.on()
-
-   floor =[Block(i*block_size,HEIGHT-block_size,block_size)
-            for i in range(-WIDTH//block_size,(WIDTH *2) // block_size)]
    
-   objects =[*floor,Block(0,HEIGHT - block_size * 2,block_size),fire]
+   platforms = [Falling_Platform(450+i*block_size*2,HEIGHT- 4*block_size-32,32,10)
+            for i in range(4)]
 
+   objects = build_terrain(block_size)
+   objects.append(fire)
+   objects.extend([*platforms])
 
    offset_x =0
    scroll_area_width = 200
@@ -319,6 +409,8 @@ def main(window):
 
       player.loop(FPS)
       fire.loop()
+      for obj in platforms:
+         obj.loop()
       handle_move(player,objects)
       draw(window, background, bg_image,player,objects,offset_x)
 
