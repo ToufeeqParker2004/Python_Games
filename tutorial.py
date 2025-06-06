@@ -367,7 +367,12 @@ def build_terrain(block_size):
    floor =[Block(i*block_size,HEIGHT-block_size,block_size)
             for i in range(-WIDTH//block_size,(WIDTH *2) // block_size)]
    
-   objects =[*floor,Block(0,HEIGHT - block_size * 2,block_size),*two_block,*second_level,*additional_blocks,*stariway]
+   wall_1 =[Block(-WIDTH,HEIGHT-i*block_size,block_size)
+            for i in range(HEIGHT // block_size)]
+   wall_2 =[Block(WIDTH+900,HEIGHT-i*block_size,block_size)
+            for i in range(HEIGHT // block_size)]
+   
+   objects =[*floor,Block(0,HEIGHT - block_size * 2,block_size),*two_block,*second_level,*additional_blocks,*stariway,*wall_1,*wall_2]
    return objects
 
 
